@@ -318,9 +318,6 @@ try
             Screen('flip', window);
             sendTriggers(triggerDevice, exp_params.num_triggers_interrupt, ...
                 exp_params.trigger_duration, exp_params.trigger_interval);
-            if exp_params.eyelink
-                Eyelink('message', sprintf('BACKGROUND_%d OFF', trialIter));
-            end
             
             fprintf('Saving data to %s...\n', sessionFile);
             save(sessionFile, 'data', '-append');
