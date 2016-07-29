@@ -31,6 +31,7 @@ try
     
     ShowCursor;
     Screen('CloseAll');
+    WaitSecs(1);
 catch err
     disp(getReport(err, 'extended'));
     Screen('CloseAll');

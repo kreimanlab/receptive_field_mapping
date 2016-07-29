@@ -1,10 +1,13 @@
 function [exp_params, hadToRecalibrate] = AwaitGoodFixation(exp_params, ...
-    window, windowRect, fixationScreen, getKeyInput)
+    window, windowRect, ...
+    fixationScreen, fixationSourceRect, fixationDestRect,...
+    getKeyInput)
 %AWAITGOODFIXATION wait for good fixation and recalibrate if necessary
 goodFixation = false;
+hadToRecalibrate = false;
 while(~goodFixation)
     goodFixation = fixationPoint(window, fixationScreen, ...
-        windowRect(3) / 2, windowRect(4) / 2, ...
+        fixationSourceRect, fixationDestRect, ...
         exp_params.fixation_threshold, exp_params.fixation_time, ...
         exp_params.fixation_timeout);
     
@@ -48,18 +51,19 @@ end
 end
 
 function resultcode = fixationPoint(window, fixationScreen, ...
-    fixX, fixY, fixAccuracy, fixTime, timeout)
-%should probably add in some keyboard awareness here, in case we need to
-%cancel or pause or something during fixation.
-Screen('DrawTexture',window,fixationScreen);
+    fixationSourceRect, fixationDestRect, ...
+    fixAccuracy, fixTime, timeout)
+Screen('DrawTexture',window,fixationScreen, fixationSourceRect, fixationDestRect);
 Screen('flip',window);
 fixOnTime = GetSecs;
+fixX = (fixationDestRect(1) + fixationDestRect(3)) / 2;
+fixY = (fixationDestRect(2) + fixationDestRect(4)) / 2;
 
 resultcode = 0;
 firstGoodTime = -1;
 lastGoodTime = -1;
 while (GetSecs - fixOnTime < timeout) && (resultcode < 1)
-    fsample = eyelink('NewestFloatSample');
+    fsample = Eyelink('NewestFloatSample');
     if isstruct(fsample)
         gx = max(fsample.gx); %gaze position in pixels - I think whichever eye is not tracked is -32768, so this should pull out the useful position
         gy = max(fsample.gy);
