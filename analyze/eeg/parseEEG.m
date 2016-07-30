@@ -20,6 +20,6 @@ while true
 end
 fclose(fin);
 fclose(fout);
-data = dataset('File', filenameOut);
+data = readtable(filenameOut);
 delete(filenameOut);
 end

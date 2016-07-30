@@ -3,22 +3,25 @@ function data = analyzeEyetracking(file)
 % data
 trial = -1;
 eyeState = EyeState.NONE;
-experimentState = ExperimentState.NONE;
-data = dataset();
+experimentState = EyetrackingExperimentState.NONE;
+data = table();
 
 % read
 fid = fopen(file);
 line = fgetl(fid);
+warning('off', 'all'); % get rid of warnings regarding default variables
 while ischar(line)
     eyeState = checkState(line, eyeState);
     [trial, experimentState] = checkImage(line, trial, experimentState);
-    if experimentState == ExperimentState.GRATING
+    if experimentState == EyetrackingExperimentState.GRATING
         fixatedSoFar = size(data, 1) < trial || data.fixated(trial);
+        data.trial(trial, 1) = trial;
         data.fixated(trial, 1) = fixatedSoFar && ...
             eyeState == EyeState.FIXATION;
     end
     line = fgetl(fid);
 end
+warning('on', 'all'); % turn back on
 fclose(fid);
 end
 
@@ -62,26 +65,26 @@ else
     if strcmp(status, 'ON')
         switch imageType
             case 'GRATING'
-                assert(experimentState == ExperimentState.NONE);
+                assert(experimentState == EyetrackingExperimentState.NONE);
                 assert(id == currentId + 1);
-                experimentState = ExperimentState.GRATING;
+                experimentState = EyetrackingExperimentState.GRATING;
             case 'BACKGROUND'
-                assert(experimentState == ExperimentState.NONE);
+                assert(experimentState == EyetrackingExperimentState.NONE);
                 assert(id == currentId); % same as grating
-                experimentState = ExperimentState.BACKGROUND;
+                experimentState = EyetrackingExperimentState.BACKGROUND;
             otherwise
                 error('unknown imageType %s', imageType);
         end
     elseif strcmp(status, 'OFF')
         switch imageType
             case 'GRATING'
-                assert(experimentState == ExperimentState.GRATING);
+                assert(experimentState == EyetrackingExperimentState.GRATING);
                 assert(id == currentId);
-                experimentState = ExperimentState.NONE;
+                experimentState = EyetrackingExperimentState.NONE;
             case 'BACKGROUND'
-                assert(experimentState == ExperimentState.BACKGROUND);
+                assert(experimentState == EyetrackingExperimentState.BACKGROUND);
                 assert(id == currentId);
-                experimentState = ExperimentState.NONE;
+                experimentState = EyetrackingExperimentState.NONE;
             otherwise
                 error('unknown imageType %s', imageType);
         end

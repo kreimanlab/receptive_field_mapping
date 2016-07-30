@@ -1,4 +1,4 @@
-classdef ExperimentState
+classdef EyetrackingExperimentState
     enumeration
         NONE, GRATING, BACKGROUND
     end

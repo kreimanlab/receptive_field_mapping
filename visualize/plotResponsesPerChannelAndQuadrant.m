@@ -1,8 +1,9 @@
 function fig = plotResponsesPerChannelAndQuadrant(data, ...
     channels, figureName)
 if ~exist('channels', 'var')
-    channels = unique(data.channel);
+    channels = unique(data.mappedChannel);
 end
+assert(~isempty(channels));
 if ~exist('figureName', 'var')
     figureName = sprintf('%d Electrodes - all quadrants', numel(channels));
 end
@@ -21,7 +22,7 @@ cols = ceil(numel(channels) / rows);
 
 for channelIter = 1:numel(channels)
     channel = channels{channelIter};
-    channelData = data(strcmp(data.channel, channel), :);
+    channelData = data(strcmp(data.mappedChannel, channel), :);
     subplot(rows, cols, channelIter);
     for quadrantIter = 1:numel(quadrants)
         quadrant = quadrants{quadrantIter};
