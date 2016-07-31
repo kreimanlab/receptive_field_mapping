@@ -79,4 +79,5 @@ ScrVars.FixRectBig = [0 0 12 12];
 ScrVars.Fixation = CenterRectOnPoint (ScrVars.FixRect, ScrVars.x_center, ScrVars.y_center);
 ScrVars.FixationBig = CenterRectOnPoint (ScrVars.FixRectBig, ScrVars.x_center, ScrVars.y_center);
 
-%[ScrVars.ScreenGeo] = SkyraScreenGeometry;
+Screen('CloseAll');
+WaitSecs(1);

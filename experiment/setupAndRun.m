@@ -3,20 +3,31 @@ addpath(genpath(pwd));
 black = 0;
 gray = 128;
 white = 255;
+trigger = Trigger();
 %% experiment details
 subjectName = 'subj01-cortex';
 
 debug = 1;
 if debug
     Screen('Preference', 'SkipSyncTests', 1);
+    trigger = DummyTrigger();
 end
 
 %% advanced options
-monitorID = 1;
+[~, ScrVars] = GenScreenSetup();
+% grating
+ScrWdCm = 70; %
+DistToScrCm = 85; % 
+gratingImageDegrees = 5;
+Geo = GKlab_ScreenGeometry(ScrVars.winWidth, ScrWdCm, DistToScrCm);
+gratingImage = createGratingImage(gratingImageDegrees, ...
+    Geo.FovDegPerPix, gray, black);
+
+monitorID = ScrVars.ScreenNumber;
 
 images_per_sequence = 5;
-images_per_score_sequence = 15;
-sequences_per_block = 150;
+images_per_score_sequence = 10;
+sequences_per_block = 100;
 
 % confirm experimental details
 fprintf('*************************************************\n');
@@ -26,7 +37,7 @@ fprintf('Monitor ID: %d\n', monitorID);
 fprintf('*************************************************\n');
 
 %% setup eyetracker
-eyelink = 0;
+eyelink = ~debug;
 if(eyelink)
     [eyelinkFile, success] = setupEyetracker(monitorID, subjectName);
     if ~success
@@ -37,12 +48,15 @@ else
 end
 
 %% run actual experiment
-[eyelinkFile, eyelink] = runExperiment(...
+[eyelinkFile, eyelink] = runExperiment(trigger, ...
     'images_per_sequence', images_per_sequence, ...
     'images_per_score_sequence', images_per_score_sequence, ...
     'sequences_per_block', sequences_per_block, ...
+    'grating_image', gratingImage, ...
     'subject_name', subjectName, ...
     'eyelink', eyelink, 'eyelink_file', eyelinkFile, ...
+    'monitor_id', monitorID, ...
+    'scr_vars', ScrVars, ...
     'debug_mode', debug);
 
 % grab eyelink data

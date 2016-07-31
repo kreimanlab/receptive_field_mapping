@@ -1,6 +1,6 @@
-function [eyelinkFile, beyelink] = runExperiment(varargin)
-program_name = 'Triggers';
-program_version = 0;
+function [eyelinkFile, beyelink] = runExperiment(trigger, varargin)
+program_name = 'ReceptiveFieldMapping_Motion';
+program_version = 2;
 
 black = 0;
 gray = 128;
@@ -9,14 +9,22 @@ white = 255;
 exp_params.monitor_id = 1;
 exp_params.debug_mode = 1;
 exp_params.subject_name = '';
+exp_params.scr_vars = [];
 
 exp_params.session = 1;
 exp_params.images_per_sequence = 5;
 exp_params.images_per_score_sequence = 15;
 exp_params.sequences_per_block = 10;
 exp_params.background_color = gray;
+
+% grating
 exp_params.grating_image = [];
 exp_params.grating_size = [-1, -1];
+exp_params.num_motion_frames = 13;
+exp_params.motion_timeout_seconds = 42 / 1000;
+exp_params.motion_change_pixels = 2;
+exp_params.motion_speed1 = 2;
+exp_params.motion_speed2 = exp_params.motion_speed1 * 3;
 
 % trigger
 exp_params.trigger_duration = 0.02;
@@ -35,6 +43,10 @@ exp_params.eyelink_file = '';
 exp_params.fixation_threshold = 3; % radius in visual angle degrees around fixation point to count as fixation
 exp_params.fixation_time = 0.5; % time in seconds fixation must be maintained before trial starts
 exp_params.fixation_timeout = 5; % number of seconds to wait at fixation point before asking about recalibration
+exp_params.fixation_size = 14;
+exp_params.fixation_width = 2;
+exp_params.fixation_color = black;
+exp_params.fixation_odd_color = white;
 
 % timing
 exp_params.pause_after_message = 0.1;
@@ -44,8 +56,6 @@ exp_params.pause_before_message = 0.65;
 % testing
 exp_params.print_score = 0;
 
-exp_params.fixation_size = 14;
-exp_params.fixation_width = 2;
 
 % keys
 % note that we have to adjust all of our key codes to the computer in the
@@ -109,41 +119,25 @@ FlushEvents('keyDown');
 % the PsychToolbox screen and go back to Matlab command window
 % in case of an error
 try
-    [window, ScrVars] = GenScreenSetup(exp_params.background_color);
-    windowRect = ScrVars.winRect;
+    [window, windowRect] = Screen('OpenWindow', ...
+        exp_params.monitor_id, exp_params.background_color);
     Priority(MaxPriority(window, 'WaitBlanking'));
     windowSize = windowRect(3:4);
     exp_params.fixation_position_x = windowSize(1) / 2;
     exp_params.fixation_position_y = windowSize(2) / 2;
     
     % grating
-    ScrWdCm = 70; %
-    DistToScrCm = 85; % 
-    gratingImageDegrees = 3;
-    Geo = GKlab_ScreenGeometry(ScrVars.winWidth, ScrWdCm, DistToScrCm);
-    gratingImage = createGratingImage(gratingImageDegrees, ...
-        Geo.FovDegPerPix, gray, black);
+    gratingImage = exp_params.grating_image;
     
     % background texture
     backgroundMatrix = exp_params.background_color * ones(windowSize);
     backgroundScreen = Screen('maketexture', window, backgroundMatrix);
     
-    % fixation texture
-    normalFixationMatrix = createFixationMatrix(...
-        exp_params.fixation_size, exp_params.fixation_width, ...
-        exp_params.background_color, black);
-    normalFixationScreen = Screen('maketexture', window, normalFixationMatrix);
-    oddFixationMatrix = createFixationMatrix(...
-        exp_params.fixation_size, exp_params.fixation_width, ...
-        exp_params.background_color, white);
-    oddFixationScreen = Screen('maketexture', window, oddFixationMatrix);
-    fixationSourceRect = [0, 0, size(normalFixationMatrix)];
+    % fixation measures
+    fixationSourceRect = [0, 0, exp_params.fixation_size, exp_params.fixation_size];
     fixationDestRect = CenterRectOnPointd(fixationSourceRect, ...
         exp_params.fixation_position_x, ...
         exp_params.fixation_position_y);
-    
-    % grating texture
-    gratingTexture = Screen('MakeTexture', window, gratingImage);
     
     % Load screen
     Screen(window, 'TextFont', 'Geneva ');
@@ -155,7 +149,7 @@ try
     Screen('flip', window);
     
     % trigger
-    triggerDevice = initializeTrigger();
+    triggerDevice = trigger.initializeTrigger();
     
     % input parameters
     keyboards = GetKeyboardIndices;
@@ -197,133 +191,159 @@ try
     WaitForKey(keyboards, 0, exp_params.exit_keys);
     
     %% trials
-    trialIter = 0;
-    sendTriggers(triggerDevice, exp_params.num_triggers_experiment_start, ...
+    trial = 0;
+    trigger.sendTriggers(triggerDevice, ...
+        exp_params.num_triggers_experiment_start, ...
         exp_params.trigger_duration, exp_params.trigger_interval);
     while true
-        trialIter = trialIter + 1;
-        data.trial(trialIter, 1) = trialIter;
-        fprintf('Trial %d\n', trialIter);
-        data.fixation_position_x(trialIter, 1) = exp_params.fixation_position_x;
-        data.fixation_position_y(trialIter, 1) = exp_params.fixation_position_y;
-        data.grating_position(trialIter, 1) = prod(windowSize) * rand(1);
-        [data.grating_position_x(trialIter, 1), ...
-            data.grating_position_y(trialIter, 1)] = ...
+        trial = trial + 1;
+        warning('off', 'all'); % ignore default variables warning
+        data.trial(trial, 1) = trial;
+        warning('on', 'all'); % turn back on
+        fprintf('Trial %d\n', trial);
+        % fixation
+        data.fixation_position_x(trial, 1) = exp_params.fixation_position_x;
+        data.fixation_position_y(trial, 1) = exp_params.fixation_position_y;
+        % grating
+        data.grating_motion_direction(trial, 1) = randsample(4, 1);
+        data.grating_motion_speed(trial, 1) = exp_params.motion_speed1 + ...
+            (rand(1) > 0.5) * (exp_params.motion_speed2 - exp_params.motion_speed1);
+        data.grating_position(trial, 1) = prod(windowSize) * rand(1);
+        [data.grating_position_x(trial, 1), ...
+            data.grating_position_y(trial, 1)] = ...
             ind2sub(windowSize, ...
-            data.grating_position(trialIter));
-        data.odd(trialIter, 1:3) = rand(1, 3) < 0.01;
+            data.grating_position(trial));
+        data.odd(trial, 1) = rand(1) < (1 / exp_params.images_per_score_sequence);
         
         %% fixation
-        fixationScreen = getFixationScreen(data.odd(trialIter, 1), ...
-            normalFixationScreen, oddFixationScreen);
-        Screen('DrawTexture', window, fixationScreen, ...
-            fixationSourceRect, fixationDestRect);
+        drawFixation = @() centerFixation(window, 3, ...
+            exp_params.fixation_size, exp_params.fixation_color, ...
+            exp_params.fixation_width);
+        drawFixation();
         Screen('flip', window);
-        data.recalibrated(trialIter, 1) = false;
+        data.recalibrated(trial, 1) = false;
         % check fixation only every images_per_sequence trials
-        if mod(trialIter - 1, exp_params.images_per_sequence) == 0
+        if mod(trial - 1, exp_params.images_per_sequence) == 0
             if exp_params.eyelink
                 [exp_params, hadToRecalibrate] = AwaitGoodFixation(exp_params, ...
-                    window, windowRect, fixationScreen, ...
-                    fixationSourceRect, fixationDestRect, ...
+                    window, windowRect, drawFixation, ...
+                    fixationDestRect, ...
                     curry(@WaitForKeyKeyboard, keyboards,0, exp_params.exit_keys));
-                data.recalibrated(trialIter, 1) = hadToRecalibrate;
+                data.recalibrated(trial, 1) = hadToRecalibrate;
             else
                 WaitSecs(exp_params.pause_inter_trials);
             end
         end
         
         %% present grating
+        currentGratingImage = gratingImage;
+        motionShift = [0, exp_params.motion_change_pixels];
+        motionShift = motionShift * data.grating_motion_speed(trial);
+        if mod(data.grating_motion_direction(trial), 2) == 0
+            currentGratingImage = currentGratingImage';
+            motionShift(:, [1, 2]) = motionShift(:, [2, 1]);
+        end
+        if ismember(data.grating_motion_direction(trial), [1, 4])
+            motionShift = motionShift * -1;
+        end
+        
         sourceRect = [0, 0, size(gratingImage)];
         destRect = CenterRectOnPointd(sourceRect, ...
-            data.grating_position_x(trialIter), ...
-            data.grating_position_y(trialIter));
-        fixationScreen = getFixationScreen(data.odd(trialIter, 2), ...
-            normalFixationScreen, oddFixationScreen);
-        Screen('DrawTexture', window, fixationScreen, ...
-            fixationSourceRect, fixationDestRect);
-        Screen('DrawTexture', window, gratingTexture, sourceRect, destRect);
-        vblGratingStart = Screen('flip', window);
-        if exp_params.eyelink
-            Eyelink('message', sprintf('GRATING_%d ON', trialIter));
+            data.grating_position_x(trial), ...
+            data.grating_position_y(trial));
+        lastFrameTime = GetSecs();
+        for motionIter = 1:exp_params.num_motion_frames
+            gratingTexture = Screen('MakeTexture', window, ...
+                circshift(currentGratingImage, motionIter * motionShift));
+            Screen('DrawTexture', window, gratingTexture, ...
+                sourceRect, destRect);
+            drawFixation();
+            vblGratingStart = Screen('flip', window, ...
+                lastFrameTime + exp_params.motion_timeout_seconds);
+            lastFrameTime = vblGratingStart;
+            if motionIter == 1 % first frame
+                if exp_params.eyelink
+                    Eyelink('message', sprintf('GRATING_%d ON', trial));
+                end
+                trigger.sendTriggers(triggerDevice, exp_params.num_triggers_image_onoff, ...
+                    exp_params.trigger_duration, exp_params.trigger_interval);
+                data.presentationStart(trial, 1) = vblGratingStart;
+            end
         end
-        sendTriggers(triggerDevice, exp_params.num_triggers_image_onoff, ...
-            exp_params.trigger_duration, exp_params.trigger_interval);
         
         %% show background for some duration, measure image vbl
-        fixationScreen = getFixationScreen(data.odd(trialIter, 3), ...
-            normalFixationScreen, oddFixationScreen);
         Screen('DrawTexture', window, backgroundScreen);
-        Screen('DrawTexture', window, fixationScreen, ...
-            fixationSourceRect, fixationDestRect);
+        centerFixation(window, 3, exp_params.fixation_size, ...
+            data.odd(trial) * exp_params.fixation_odd_color, ...
+            exp_params.fixation_width);
         vblBackgroundStart = Screen('flip', window, ...
             vblGratingStart + exp_params.grating_duration - 1 / 60 / 10);
         if exp_params.eyelink
-            Eyelink('message', sprintf('GRATING_%d OFF', trialIter));
-            Eyelink('message', sprintf('BACKGROUND_%d ON', trialIter));
+            Eyelink('message', sprintf('GRATING_%d OFF', trial));
+            Eyelink('message', sprintf('BACKGROUND_%d ON', trial));
         end
-        sendTriggers(triggerDevice, exp_params.num_triggers_image_onoff, ...
+        trigger.sendTriggers(triggerDevice, exp_params.num_triggers_image_onoff, ...
             exp_params.trigger_duration, exp_params.trigger_interval);
-        imagePresentationDuration = vblBackgroundStart - vblGratingStart;
+        stimulusPresentationDuration = vblBackgroundStart - data.presentationStart(trial);
         if exp_params.debug_mode
-            fprintf('Real SOA: %f\n', imagePresentationDuration);
+            fprintf('Real SOA: %f\n', stimulusPresentationDuration);
         end
-        data.presentationStart(trialIter, 1) = vblGratingStart;
-        data.presentationDuration(trialIter, 1) = imagePresentationDuration;
-        data.backgroundPresentationStart(trialIter, 1) = vblBackgroundStart;
+        data.presentationDuration(trial, 1) = stimulusPresentationDuration;
+        data.backgroundPresentationStart(trial, 1) = vblBackgroundStart;
         % off
         vblBackgroundEnd = WaitSecs(exp_params.background_duration);
         if exp_params.eyelink
-            Eyelink('message', sprintf('BACKGROUND_%d OFF', trialIter));
+            Eyelink('message', sprintf('BACKGROUND_%d OFF', trial));
         end
-        data.backgroundPresentationDuration(trialIter, 1) = ...
+        data.backgroundPresentationDuration(trial, 1) = ...
             vblBackgroundEnd - vblBackgroundStart;
         
         %% task
-        if mod(trialIter, exp_params.images_per_score_sequence) == 0
-            sendTriggers(triggerDevice, exp_params.num_triggers_interrupt, ...
+        if mod(trial, exp_params.images_per_score_sequence) == 0
+            trigger.sendTriggers(triggerDevice, exp_params.num_triggers_interrupt, ...
                 exp_params.trigger_duration, exp_params.trigger_interval);
             DrawCenteredText(window, {'Did the cross color change?'}, black);
             DrawCenteredText(window, {'No'}, black, -300);
             DrawCenteredText(window, {'Yes'}, black, +300);
             choiceStart = Screen('flip', window);
-            data.choicePresentationStart(trialIter, 1) = choiceStart;
+            data.choicePresentationStart(trial, 1) = choiceStart;
             
             [keyCode, keyTime] = WaitForKey(keyboards, 0, exp_params.exit_keys);
             assert(~isempty(keyCode) && any(exp_params.r_keys == find(keyCode)));
-            data.reactionTime(trialIter, 1) = ...
-                keyTime - data.choicePresentationStart(trialIter);
-            data.responseKey(trialIter, 1) = find(keyCode);
-            data.response(trialIter, 1) = exp_params.keys_responses(find(...
-                exp_params.r_keys == data.responseKey(trialIter), ...
+            data.reactionTime(trial, 1) = ...
+                keyTime - data.choicePresentationStart(trial);
+            data.responseKey(trial, 1) = find(keyCode);
+            data.response(trial, 1) = exp_params.keys_responses(find(...
+                exp_params.r_keys == data.responseKey(trial), ...
                 1, 'first'));
-            assert(~isnan(data.response(trialIter)));
+            assert(~isnan(data.response(trial)));
             
-            data.truth(trialIter, 1) = any(any(data.odd(trialIter - ...
-                exp_params.images_per_score_sequence + 1:trialIter, :)));
-            data.correct(trialIter, 1) = ...
-                data.response(trialIter) == data.truth(trialIter);
+            data.truth(trial, 1) = any(any(data.odd(trial - ...
+                exp_params.images_per_score_sequence + 1:trial, :)));
+            data.correct(trial, 1) = ...
+                data.response(trial) == data.truth(trial);
         else
-            data.choicePresentationStart(trialIter, 1) = NaN(1);
-            data.reactionTime(trialIter, 1) = NaN(1);
-            data.responseKey(trialIter, 1) = NaN(1);
-            data.response(trialIter, 1) = NaN(1);
-            data.truth(trialIter, 1) = NaN(1);
-            data.correct(trialIter, 1) = NaN(1);
+            data.choicePresentationStart(trial, 1) = NaN(1);
+            data.reactionTime(trial, 1) = NaN(1);
+            data.responseKey(trial, 1) = NaN(1);
+            data.response(trial, 1) = NaN(1);
+            data.truth(trial, 1) = NaN(1);
+            data.correct(trial, 1) = NaN(1);
         end
         
         % block done?
-        if(mod(trialIter, imagesPerBlock) == 0)
+        if(mod(trial, imagesPerBlock) == 0)
             Screen('DrawTexture', window, backgroundScreen);
             Screen('flip', window);
-            sendTriggers(triggerDevice, exp_params.num_triggers_interrupt, ...
+            trigger.sendTriggers(triggerDevice, exp_params.num_triggers_interrupt, ...
                 exp_params.trigger_duration, exp_params.trigger_interval);
             
             fprintf('Saving data to %s...\n', sessionFile);
             save(sessionFile, 'data', '-append');
             
-            performance = data.correct(trialIter - imagesPerBlock + 1:...
-                trialIter) / imagesPerBlock;
+            taskTrials = ~isnan(data.truth) & ismember(data.trial, ...
+                trial - imagesPerBlock + 1:trial);
+            performance = sum(data.correct(taskTrials)) / sum(taskTrials);
             drawScoreScreen(window, blockIndex, performance, ...
                 exp_params.performanceMessages, black);
             WaitForKey(keyboards, 0, exp_params.exit_keys);
@@ -434,39 +454,5 @@ while ~b && (GetSecs() - startTime < duration || duration == 0)
 end
 if GetSecs() - startTime < duration
     WaitSecs(startTime + duration - GetSecs());
-end
-end
-
-function fixationScreen = getFixationScreen(odd, normalScreen, oddScreen)
-fixationScreen = normalScreen;
-if odd
-    fixationScreen = oddScreen;
-end
-end
-
-function deviceIndex = initializeTrigger()
-% initialize PMD1208FS
-device=initPMD1208FS;
-if isnumeric(device) && device<0
-    error('Trigger device not found');
-else
-    device=device.index;
-    err=DaqDConfigPort(device,0,0); % port = 0 direction = 0
-    FastDaqDout=inline('PsychHID(''SetReport'', device, 2, hex2dec(''04''), uint8([0 port data]))','device', 'port', 'data');
-end
-deviceIndex = DaqDeviceIndex;
-DaqDConfigPort(deviceIndex,0,0);
-DaqDOut(deviceIndex,0,0);
-end
-
-function sendTriggers(deviceIndex, numTriggers, ...
-    trigger_duration, trigger_interval)
-for i=1:numTriggers
-    DaqDOut(deviceIndex,0,1);
-    WaitSecs(trigger_duration);
-    DaqDOut(deviceIndex,0,0);
-    if i<numTriggers
-        WaitSecs(trigger_interval-trigger_duration);
-    end
 end
 end
