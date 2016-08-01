@@ -8,6 +8,7 @@ if ~exist('figureName', 'var')
     figureName = sprintf('%d Electrodes - all quadrants', numel(channels));
 end
 % use only data where fixated
+data.fixated = logical(data.fixated);
 data = data(data.fixated, :);
 %% plot
 fig = figure('Name', figureName);
@@ -23,12 +24,13 @@ cols = ceil(numel(channels) / rows);
 for channelIter = 1:numel(channels)
     channel = channels{channelIter};
     channelData = data(strcmp(data.mappedChannel, channel), :);
+    originalChannel = unique(channelData.channel);
+    assert(numel(originalChannel) == 1);
+    originalChannel = originalChannel{1};
     subplot(rows, cols, channelIter);
     for quadrantIter = 1:numel(quadrants)
         quadrant = quadrants{quadrantIter};
         quadrantData = channelData(strcmp(channelData.quadrant, quadrant), :);
-        assert(numel(unique(quadrantData.trial)) == ...
-            size(quadrantData.voltageResponses, 1));
         % time
         time = quadrantData.timepoints(1, :);
         otherTimes = quadrantData.timepoints(2:end, :);
@@ -36,13 +38,13 @@ for channelIter = 1:numel(channels)
             1:size(otherTimes, 1), 'UniformOutput', false);
         assert(all([matchesOtherTimes{:}]));
         % response
-        responseMean = mean(quadrantData.voltageResponses, 1);
-        responseError = stderrmean(quadrantData.voltageResponses, 1);
+        responseMean = mean(quadrantData.responseVoltages, 1);
+        responseError = stderrmean(quadrantData.responseVoltages, 1);
         shadedErrorBar(time, responseMean, responseError, ...
             {'Color', colorWheel(quadrantIter, :)}, true);
         hold on;
         xlim([min(time), max(time)]);
-        title(channel);
+        title(sprintf('%s (%s)', channel, originalChannel));
     end
     hold off;
 end
@@ -60,12 +62,5 @@ hold off;
 %% save
 saveDir = [fileparts(mfilename('fullpath')), ...
     '/../figures/responses_per_channel'];
-if ~exist(saveDir, 'dir')
-    mkdir(saveDir);
-end
-figName = get(fig, 'Name');
-figName = strrep(figName, '/', '_');
-saveFile = [saveDir, '/', figName];
-saveas(fig, saveFile);
-export_fig(saveFile, '-png', fig);
+saveFigures(fig, saveDir, true);
 end
