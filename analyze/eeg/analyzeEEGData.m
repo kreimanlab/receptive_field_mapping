@@ -6,16 +6,24 @@ if ~istable(rawData) && ~isa(rawData, 'dataset')
             rawData = load(rawData);
             rawData = rawData.data;
         case '.txt'
-            rawData = parseEEG(rawData);
+            if exist('relevantRows', 'var')
+                rawData = parseEEG(rawData, ...
+                    min(relevantRows), max(relevantRows));
+                relevantRows = relevantRows - min(relevantRows) + 1;
+            else
+                rawData = parseEEG(rawData);
+            end
         otherwise
             error('Unknown extension %s', extension);
     end
 end
 if exist('relevantRows', 'var')
+    assert(~isempty(relevantRows));
     rawData = rawData(relevantRows, :);
 end
 
 %% settings
+stopFrequencies = 60 * (1:4);
 samplingRate = 500; % Hz = 1/1000ms
 samplesPerSecond = 1000 / samplingRate;
 timeFrameToExtract = -100:samplesPerSecond:400;
@@ -38,15 +46,15 @@ channelNameMapping = {...
 %% properties
 channelNames = arrayfun(@(i) sprintf('C%03d', i), selectedChannels, ...
     'UniformOutput', false);
-assert(all(ismember(channelNames, rawData.Properties.VarNames)));
+assert(all(ismember(channelNames, rawData.Properties.VariableNames)));
 assert(numel(channelNames) == numel(channelNameMapping));
 
 timeIndicesToExtract = timeFrameToExtract / samplesPerSecond;
 
 %% triggers
-[trialStarts, numInterruptions] = getTriggerTrialStarts(...
-    rawData.(triggerChannel1) - rawData.(triggerChannel2), ...
-    threshold, quickSuccessionMaxDistance);
+triggerSignal = rawData.(triggerChannel1) - rawData.(triggerChannel2);
+[trialStarts, trials, numInterruptions] = getTriggerTrialStarts(...
+    triggerSignal, threshold, quickSuccessionMaxDistance);
 %% voltages
 % preallocate table
 numRows = numel(channelNames) * numel(trialStarts);
@@ -64,9 +72,11 @@ for channelIter = 1:numel(channelNames)
     
     for trialIter = 1:numel(trialStarts)
         trialTimeIndices = timeIndicesToExtract + trialStarts(trialIter);
-        trialVoltages = rawData.(channelName)(trialTimeIndices);
+        trialVoltages = rawData.(channelName);
+        trialVoltages = notchfilt(trialVoltages, samplingRate, stopFrequencies);
+        trialVoltages = trialVoltages(trialTimeIndices);
         
-        trial(rowIter) = trialIter;
+        trial(rowIter) = trials(trialIter);
         timepoints(rowIter, :) = timeFrameToExtract;
         timeIndices(rowIter, :) = trialTimeIndices;
         responseVoltages(rowIter, :) = trialVoltages;

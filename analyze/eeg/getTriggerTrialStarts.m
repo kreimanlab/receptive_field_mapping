@@ -1,4 +1,4 @@
-function [trialStarts, numInterruptions] = getTriggerTrialStarts(triggerSignal, ...
+function [trialStarts, trials, numInterruptions] = getTriggerTrialStarts(triggerSignal, ...
     threshold, quickSuccessionMaxDistance)
 triggers = getTriggerStarts(triggerSignal, threshold);
 
@@ -8,10 +8,12 @@ distance = prepend(Inf, distance);
 quickSuccessions = distance < quickSuccessionMaxDistance;
 
 % find trials
-trialStarts = cell(0);
+trialStarts = NaN(0);
+trials = NaN(0);
 state = EegExperimentState.NOT_STARTED;
 numInterruptions = 0;
 trial = 0;
+trialIter = 0;
 i = 1;
 while i < numel(triggers)
     if state == EegExperimentState.NOT_STARTED % experiment start
@@ -30,15 +32,16 @@ while i < numel(triggers)
             case {EegExperimentState.STIMULI_OFF, ...
                     EegExperimentState.INTERRUPTED}
                 trial = trial + 1;
+                trialIter = trialIter + 1;
                 state = EegExperimentState.STIMULI_ON;
-                trialStarts{trial} = triggers(i);
+                trialStarts(trialIter) = triggers(i);
+                trials(trialIter) = trial;
             otherwise
                 error('Invalid state %s', state);
         end
         i = i + 1;
     end
 end
-trialStarts = cell2mat(trialStarts);
 end
 
 function startRows = getTriggerStarts(trigger, threshold)

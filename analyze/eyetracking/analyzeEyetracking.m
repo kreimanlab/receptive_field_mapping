@@ -1,27 +1,31 @@
-function data = analyzeEyetracking(file)
+function data = analyzeEyetracking(file, expectedNumTrials)
 
 % data
-trial = -1;
+trialNum = -1;
 eyeState = EyeState.NONE;
 experimentState = EyetrackingExperimentState.NONE;
-data = table();
 
 % read
 fid = fopen(file);
+assert(fid > 0);
 line = fgetl(fid);
-warning('off', 'all'); % get rid of warnings regarding default variables
+trial = NaN(expectedNumTrials, 1);
+fixated = NaN(expectedNumTrials, 1);
 while ischar(line)
     eyeState = checkState(line, eyeState);
-    [trial, experimentState] = checkImage(line, trial, experimentState);
+    [trialNum, experimentState] = checkImage(line, trialNum, experimentState);
+    assert(trialNum <= expectedNumTrials);
     if experimentState == EyetrackingExperimentState.GRATING
-        fixatedSoFar = size(data, 1) < trial || data.fixated(trial);
-        data.trial(trial, 1) = trial;
-        data.fixated(trial, 1) = fixatedSoFar && ...
+        fixatedSoFar = isnan(fixated(trialNum)) || fixated(trialNum);
+        trial(trialNum, 1) = trialNum;
+        fixated(trialNum, 1) = fixatedSoFar && ...
             eyeState == EyeState.FIXATION;
     end
     line = fgetl(fid);
 end
-warning('on', 'all'); % turn back on
+assert(~any(isnan(trial)) && ~any(isnan(fixated)));
+fixated = logical(fixated);
+data = table(trial, fixated);
 fclose(fid);
 end
 
